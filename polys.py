@@ -25,6 +25,13 @@ class Point3:
         txyz_ = np.dot(aff, xyz_)
         return Point3(*txyz_[:3])
 
+    def is_close(self, p2):
+        return (
+            math.isclose(self.x, p2.x) and
+            math.isclose(self.y, p2.y) and
+            math.isclose(self.z, p2.z)
+            )
+
 def hypot3(a, b, c):
     return math.hypot(math.hypot(a, b), c)
 
@@ -71,6 +78,16 @@ class Vector3:
 
 
 @attr.s(frozen=True)
+class Line3:
+    """A line in three dimensions."""
+    p1 = attr.ib(type=Point3)
+    p2 = attr.ib(type=Point3)
+
+    def p1p2(self):
+        return self.p1, self.p2
+
+
+@attr.s(frozen=True)
 class Plane:
     """A plane in three dimensions."""
     # Represented in point-normal form: a point in the plane, and the unit normal.
@@ -84,18 +101,34 @@ class Plane:
         normal = v2.cross(v3)
         return cls(pt=p1, unormal=normal.unit())
 
-    def xy_points(self):
-        """Return two (x,y) points where this plane crosses the xy plane."""
-        # Plane equation is a(x-x0) + b(y-y0) + c(z-z0) = 0
-        # where abc is self.unormal, and xyz0 is self.pt
+    def abcd(self):
         a, b, c = self.unormal.dxdydz()
         x0, y0, z0 = self.pt.xyz()
-        pt1 = (x0, (c * z0) / b + y0)
-        pt2 = ((c * z0) / a + x0, y0)
-        return pt1, pt2
+        d = a * x0 + b * y0 + c * z0
+        return a, b, c, d
 
     def distance_to_point(self, pt):
         return self.unormal.dot(Vector3.from_points(self.pt, pt))
+
+    def is_parallel(self, other):
+        dot = self.unormal.dot(other.unormal)
+        return math.isclose(abs(dot), 1)
+
+    def intersect_plane(self, other):
+        """Returns two Point3's on the intersection."""
+        a = self.abcd()
+        b = other.abcd()
+
+        # From: https://stackoverflow.com/questions/48126838/plane-plane-intersection-in-python
+        a_vec, b_vec = np.array(a[:3]), np.array(b[:3])
+        aXb_vec = np.cross(a_vec, b_vec)
+        A = np.array([a_vec, b_vec, aXb_vec])
+        d = np.array([-a[3], -b[3], 0.]).reshape(3,1)
+
+        # could add np.linalg.det(A) == 0 test to prevent linalg.solve throwing error
+        p_inter = np.linalg.solve(A, d).T
+        return Line3(Point3(*p_inter[0]), Point3(*(p_inter + aXb_vec)[0]))
+
 
 
 @attr.s(frozen=True, cmp=False)
@@ -217,7 +250,7 @@ class Drawing:
             return getattr(self.surface, name)
 
     @contextlib.contextmanager
-    def style(self, rgb=None, width=None, dash=None, dash_offset=0):
+    def style(self, rgb=None, rgba=None, width=None, dash=None, dash_offset=0):
         """Set and restore the drawing style."""
         o_source = self.get_source()
         o_width = self.get_line_width()
@@ -225,6 +258,8 @@ class Drawing:
         try:
             if rgb is not None:
                 self.set_source_rgb(*rgb)
+            if rgba is not None:
+                self.set_source_rgba(*rgba)
             if width is not None:
                 self.set_line_width(width)
             if dash is not None:
@@ -240,12 +275,22 @@ class Drawing:
         self.surface.finish()
         return IPython.display.SVG(data=self.svgio.getvalue())
 
-def cross(drawing, x, y, r):
+def draw_cross(drawing, x, y, r):
     drawing.move_to(x-r, y)
     drawing.line_to(x+r, y)
     drawing.move_to(x, y-r)
     drawing.line_to(x, y+r)
     drawing.stroke()
+
+def draw_line(drawing, line):
+    p1, p2 = line.p1p2()
+    (x1, y1, _), (x2, y2, _) = p1.xyz(), p2.xyz()
+    dx = x2 - x1
+    dy = y2 - y1
+    n = 100
+    drawing.move_to(x1 - n * dx, y1 - n * dy)
+    drawing.line_to(x2 + n * dx, y2 + n * dy)
+
 
 def transform_plane_to_xy(plane):
     normal = plane.unormal

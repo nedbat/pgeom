@@ -1,0 +1,5 @@
+jupyter
+matplotlib
+pycairo
+attrs
+transforms3d

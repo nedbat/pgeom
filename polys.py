@@ -66,7 +66,7 @@ class Vector3:
         ox, oy, oz = other.dxdydz()
         return Vector3(
             sy * oz - sz * oy,
-            sx * oz - sz * ox,
+            sz * ox - sx * oz,
             sx * oy - sy * ox,
             )
     
@@ -90,7 +90,7 @@ class Line3:
 @attr.s(frozen=True)
 class Plane:
     """A plane in three dimensions."""
-    # Represented in point-normal form: a point in the plane, and the unit normal.
+    # Represented in point-unit-normal form: a point in the plane, and the unit normal.
     pt = attr.ib(type=Point3)
     unormal = attr.ib(type=Vector3)
 
@@ -220,8 +220,7 @@ class Drawing:
 
     def grid(self):
         r = 100
-        lblue = (.9, .9, 1)
-        with self.style(rgb=lblue):
+        with self.style(rgb=(.9, .9, 1)):
             for xy in range(-r, r):
                 if xy == 0:
                     width = 3.5
@@ -235,6 +234,14 @@ class Drawing:
                     self.move_to(-r, xy)
                     self.line_to(r, xy)
                     self.stroke()
+
+    def circle(self, xc, yc, radius):
+        self.arc(xc, yc, radius, 0, math.pi * 2)
+
+    def circle_point(self, x, y, radius=1, **style_kwargs):
+        with self.style(**style_kwargs):
+            self.circle(x, y, radius)
+            self.stroke()
 
     def screen_units(self, d):
         """Compute user-space distance for screen distance `d`."""
@@ -297,7 +304,7 @@ def transform_plane_to_xy(plane):
     up = Vector3(0, 0, 1)
     angle = math.acos(normal.dot(up))
     axis = up.cross(normal)
-    mrotate = transforms3d.axangles.axangle2aff(axis.dxdydz(), angle)
+    mrotate = transforms3d.axangles.axangle2aff(axis.dxdydz(), -angle)
     rotated = plane.pt.transform(mrotate)
     mraise = transforms3d.affines.compose([0, 0, -rotated.z], np.eye(3), np.ones(3))
     m = np.dot(mraise, mrotate)

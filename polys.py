@@ -310,11 +310,11 @@ def transform_plane_to_xy(plane):
     m = np.dot(mraise, mrotate)
     return m
 
-def sit_polyhedron(poly):
+def sit_polyhedron(poly, iface=0):
     t = list(map(lambda v: -v, poly.bounds().center().xyz()))
     mtranslate = transforms3d.affines.compose(t, np.eye(3), np.ones(3))
     poly = poly.transform(mtranslate)
-    plane = poly.planes()[0]
+    plane = poly.planes()[iface]
     mrotate = transform_plane_to_xy(plane)
     poly = poly.transform(mrotate)
     return poly
@@ -360,6 +360,24 @@ def wire_frame(poly, **drawing_kwargs):
     for seg in poly.edges():
         drawing.move_to(seg.p1.x, seg.p1.y)
         drawing.line_to(seg.p2.x, seg.p2.y)
+        drawing.stroke()
+    IPython.display.display(drawing.display())
+
+def stellation_diagram(poly, iface=0, **drawing_kwargs):
+    drawing_kwargs.setdefault('width', 400)
+    drawing_kwargs.setdefault('height', 400)
+    sitting = sit_polyhedron(poly, iface=iface)
+    xy = Plane(Point3(0, 0, 0), Vector3(0, 0, 1))
+    lines = []
+    for pl in sitting.planes():
+        if not pl.is_parallel(xy):
+            lines.append(pl.intersect_plane(xy))
+    drawing = Drawing(**drawing_kwargs)
+    drawing.translate(200, 200)
+    drawing.scale(20, 20)
+    drawing.set_line_width(0.05)
+    for line in lines:
+        draw_line(drawing, line)
         drawing.stroke()
     IPython.display.display(drawing.display())
 

@@ -310,15 +310,25 @@ def transform_plane_to_xy(plane):
     m = np.dot(mraise, mrotate)
     return m
 
-def sit_polyhedron(poly, iface=0):
+def center_polyhedron(poly):
     t = list(map(lambda v: -v, poly.bounds().center().xyz()))
     mtranslate = transforms3d.affines.compose(t, np.eye(3), np.ones(3))
     poly = poly.transform(mtranslate)
+    return poly
+
+def sit_polyhedron(poly, iface=0):
+    poly = center_polyhedron(poly)
     plane = poly.planes()[iface]
     mrotate = transform_plane_to_xy(plane)
     poly = poly.transform(mrotate)
     return poly
 
+
+def circle_pairs(lst):
+    """Yield consecutive pairs, including the wraparound last-to-first."""
+    for a, b in zip(lst, lst[1:]):
+        yield a, b
+    yield lst[-1], lst[0]
 
 class Polyhedron:
     def __init__(self, name, faces):
@@ -340,14 +350,43 @@ class Polyhedron:
     def edges(self):
         e = set()
         for f in self.faces:
-            for p1, p2 in zip(f, f[1:]):
+            for p1, p2 in circle_pairs(f):
                 e.add(Segment3(p1, p2))
-            e.add(Segment3(f[-1], f[0]))
         return e
 
     def transform(self, aff):
         tfaces = [[p.transform(aff) for p in f] for f in self.faces]
         return Polyhedron(self.name, tfaces)
+
+    def as_x3dom_data(self):
+        """Return indexedfaceset.coordindex and coordinate.point attributes"""
+        ipts = {}  # map id(pt) to index of pt
+        pts = []
+        face_indexes = []
+        for face in self.faces:
+            for pt in face:
+                ipt = id(pt)
+                if ipt not in ipts:
+                    ipts[ipt] = len(pts)
+                    pts.append(pt)
+                face_indexes.append(ipts[id(pt)])
+            face_indexes.append(-1)
+        edges = set()
+        edge_indexes = []
+        for face in self.faces:
+            for p1, p2 in circle_pairs(face):
+                edge_seg = Segment3(p1, p2)
+                if edge_seg not in edges:
+                    edge_indexes.append(ipts[id(p1)])
+                    edge_indexes.append(ipts[id(p2)])
+                    edge_indexes.append(-1)
+                    edges.add(edge_seg)
+        data = {}
+        data['faceindexes'] = " ".join(map(str, face_indexes))
+        data['coordpoints'] = ", ".join(" ".join("{:.4f}".format(v) for v in pt.xyz()) for pt in pts)
+        data['edgeindexes'] = " ".join(map(str, edge_indexes))
+        return data
+
 
 def wire_frame(poly, **drawing_kwargs):
     drawing_kwargs.setdefault('width', 200)
@@ -380,6 +419,41 @@ def stellation_diagram(poly, iface=0, **drawing_kwargs):
         draw_line(drawing, line)
         drawing.stroke()
     IPython.display.display(drawing.display())
+
+def x3dom_html(poly):
+    skeleton = """
+        <script type="text/javascript" src="https://examples.x3dom.org/example/x3dom.js"></script>
+        <x3d xmlns="http://www.x3dom.org/x3dom" showStat="false" showLog="false" x="0px" y="0px" width="600px" height="600px" altImg="helloX3D-alt.png">
+          <scene>
+            <viewpoint position='0 0 5' ></viewpoint>
+              <shape>
+                <appearance>
+                    <material
+                        diffusecolor='0.903 0.394 0.309'
+                        shininess="0.3"
+                        specularcolor=".8 .8 .8"
+                        transparency='0.1'
+                        >
+                    </material>
+                </appearance>
+                <indexedfaceset ccw="true" colorindex="" colorpervertex="false" convex="true" coordindex="{indexedfaceset_coordindex}" is="x3d" lit="true" normalindex="" normalpervertex="true" normalupdatemode="fast" solid="false" texcoordindex="" usegeocache="true">
+                    <coordinate is="x3d" point="{coordinate_point}" />
+                </indexedfaceset>
+             </shape>
+             <shape>
+                <indexedlineset ccw="true" colorindex="" colorpervertex="false" coordindex="{indexedlineset_coordindex}" is="x3d" solid="true" lit="true">
+                    <coordinate is="x3d" point="{coordinate_point}" />
+                </indexedlineset>
+             </shape>
+          </scene>
+        </x3d>
+    """
+    data = poly.as_x3dom_data()
+    return skeleton.format(
+        indexedfaceset_coordindex=data['faceindexes'],
+        indexedlineset_coordindex=data['edgeindexes'],
+        coordinate_point=data['coordpoints'],
+        )
 
 def read_netlib(lines):
     # Make a dict of sections by name

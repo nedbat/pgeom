@@ -420,40 +420,39 @@ def stellation_diagram(poly, iface=0, **drawing_kwargs):
         drawing.stroke()
     IPython.display.display(drawing.display())
 
-def x3dom_html(poly):
-    skeleton = """
+def x3dom_html(poly, light_direction="1 1 1"):
+    data = poly.as_x3dom_data()
+    x3dom = f"""
         <script type="text/javascript" src="https://examples.x3dom.org/example/x3dom.js"></script>
-        <x3d xmlns="http://www.x3dom.org/x3dom" showStat="false" showLog="false" x="0px" y="0px" width="600px" height="600px" altImg="helloX3D-alt.png">
-          <scene>
+        <x3d xmlns="http://www.x3dom.org/x3dom" showStat="false" showLog="false" x="0px" y="0px" width="600px" height="600px">
+          <!-- keysEnabled="true" disables the key bindings! https://github.com/x3dom/x3dom/issues/934 -->
+          <scene keysEnabled="true">
+            <SpotLight id='spot' on ="TRUE" beamWidth='0.9' color='1 1 1' cutOffAngle='0.78' location='12 12 12' radius='22' >  </SpotLight> 
+            <directionallight ambientintensity='0' color='1 1 1' direction='{light_direction}' global='true' intensity='1' on='true' shadowCascades='1' shadowFilterSize='0' shadowIntensity='0' shadowMapSize='1024' shadowOffset='0' shadowSplitFactor='1' shadowSplitOffset='0.1' zFar='-1' zNear='-1' ></DirectionalLight>
             <viewpoint position='0 0 5' ></viewpoint>
               <shape>
                 <appearance>
                     <material
-                        diffusecolor='0.903 0.394 0.309'
-                        shininess="0.3"
-                        specularcolor=".8 .8 .8"
+                        diffusecolor='0.9 0.4 0.3'
+                        shininess="0.9"
+                        specularcolor="0 0 0"
                         transparency='0.1'
                         >
                     </material>
                 </appearance>
-                <indexedfaceset ccw="true" colorindex="" colorpervertex="false" convex="true" coordindex="{indexedfaceset_coordindex}" is="x3d" lit="true" normalindex="" normalpervertex="true" normalupdatemode="fast" solid="false" texcoordindex="" usegeocache="true">
-                    <coordinate is="x3d" point="{coordinate_point}" />
+                <indexedfaceset ccw="true" colorindex="" colorpervertex="false" convex="true" coordindex="{data['faceindexes']}" is="x3d" lit="true" normalindex="" normalpervertex="true" normalupdatemode="fast" solid="false" texcoordindex="" usegeocache="true">
+                    <coordinate is="x3d" point="{data['coordpoints']}" />
                 </indexedfaceset>
              </shape>
              <shape>
-                <indexedlineset ccw="true" colorindex="" colorpervertex="false" coordindex="{indexedlineset_coordindex}" is="x3d" solid="true" lit="true">
-                    <coordinate is="x3d" point="{coordinate_point}" />
+                <indexedlineset ccw="true" colorindex="" colorpervertex="false" coordindex="{data['edgeindexes']}" is="x3d" solid="true" lit="true">
+                    <coordinate is="x3d" point="{data['coordpoints']}" />
                 </indexedlineset>
              </shape>
           </scene>
         </x3d>
     """
-    data = poly.as_x3dom_data()
-    return skeleton.format(
-        indexedfaceset_coordindex=data['faceindexes'],
-        indexedlineset_coordindex=data['edgeindexes'],
-        coordinate_point=data['coordpoints'],
-        )
+    return x3dom
 
 def read_netlib(lines):
     # Make a dict of sections by name
